@@ -62,6 +62,14 @@ function KeyBindingFrame_OnLoad(self)
 	KeyBindingFrame_SetSelected(nil);
 	KeyBindingFrame_LoadCategories(self);
 	KeyBindingFrame_LoadKeyBindingButtons(self);
+	
+	self:RegisterEvent("ADDON_LOADED");
+end
+
+function KeyBindingFrame_OnEvent(self, event, ...)
+	if (event == "ADDON_LOADED") then
+		KeyBindingFrame_LoadCategories(self);
+	end
 end
 
 local defaultCategories = { BINDING_HEADER_MOVEMENT,

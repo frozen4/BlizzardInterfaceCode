@@ -98,7 +98,11 @@ function MacroFrame_Update()
 					MacroFrameText:SetText(body);
 					MacroFrameSelectedMacroButton:SetID(i);
 					MacroFrameSelectedMacroButtonIcon:SetTexture(texture);
-					MacroPopupFrame.selectedIconTexture = gsub( strupper(texture), "INTERFACE\\ICONS\\", "");
+					if (tonumber(texture) ~= nil) then
+						MacroPopupFrame.selectedIconTexture = texture;
+					else
+						MacroPopupFrame.selectedIconTexture = gsub( strupper(texture), "INTERFACE\\ICONS\\", "");
+					end
 				else
 					macroButton:SetChecked(false);
 				end
@@ -336,7 +340,13 @@ function GetSpellorMacroIconInfo(index)
 	if ( not index ) then
 		return;
 	end
-	return MACRO_ICON_FILENAMES[index];
+	local texture = MACRO_ICON_FILENAMES[index];
+	local texnum = tonumber(texture);
+	if (texnum ~= nil) then
+		return texnum;
+	else
+		return texture;
+	end
 end
 
 function MacroPopupFrame_Update(self)
@@ -362,9 +372,9 @@ function MacroPopupFrame_Update(self)
 		index = (macroPopupOffset * NUM_ICONS_PER_ROW) + i;
 		texture = GetSpellorMacroIconInfo(index);
 
-		if ( index <= numMacroIcons and texture ) then			
+		if ( index <= numMacroIcons and texture ) then
 			if(type(texture) == "number") then
-				macroPopupIcon:SetToFileData(texture);
+				macroPopupIcon:SetTexture(texture);
 			else
 				macroPopupIcon:SetTexture("INTERFACE\\ICONS\\"..texture);
 			end		
@@ -375,7 +385,7 @@ function MacroPopupFrame_Update(self)
 		end
 		if ( MacroPopupFrame.selectedIcon and (index == MacroPopupFrame.selectedIcon) ) then
 			macroPopupButton:SetChecked(true);
-		elseif ( MacroPopupFrame.selectedIconTexture ==  texture ) then
+		elseif ( MacroPopupFrame.selectedIconTexture == texture ) then
 			macroPopupButton:SetChecked(true);
 		else
 			macroPopupButton:SetChecked(false);
@@ -411,7 +421,7 @@ function MacroPopupButton_SelectTexture(selectedIcon)
 	MacroPopupFrame.selectedIconTexture = nil;
 	local curMacroInfo = GetSpellorMacroIconInfo(MacroPopupFrame.selectedIcon);
 	if(type(curMacroInfo) == "number") then
-		MacroFrameSelectedMacroButtonIcon:SetToFileData(curMacroInfo);
+		MacroFrameSelectedMacroButtonIcon:SetTexture(curMacroInfo);
 	else
 		MacroFrameSelectedMacroButtonIcon:SetTexture("INTERFACE\\ICONS\\"..curMacroInfo);
 	end	

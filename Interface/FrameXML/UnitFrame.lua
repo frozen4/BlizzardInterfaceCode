@@ -1,16 +1,21 @@
 
 PowerBarColor = {};
 PowerBarColor["MANA"] = { r = 0.00, g = 0.00, b = 1.00 };
-PowerBarColor["RAGE"] = { r = 1.00, g = 0.00, b = 0.00 };
-PowerBarColor["FOCUS"] = { r = 1.00, g = 0.50, b = 0.25 };
-PowerBarColor["ENERGY"] = { r = 1.00, g = 1.00, b = 0.00 };
-PowerBarColor["CHI"] = { r = 0.71, g = 1.0, b = 0.92 };
+PowerBarColor["RAGE"] = { r = 1.00, g = 0.00, b = 0.00, fullPowerAnim=true };
+PowerBarColor["FOCUS"] = { r = 1.00, g = 0.50, b = 0.25, fullPowerAnim=true };
+PowerBarColor["ENERGY"] = { r = 1.00, g = 1.00, b = 0.00, fullPowerAnim=true };
+PowerBarColor["COMBO_POINTS"] = { r = 1.00, g = 0.96, b = 0.41 };
 PowerBarColor["RUNES"] = { r = 0.50, g = 0.50, b = 0.50 };
 PowerBarColor["RUNIC_POWER"] = { r = 0.00, g = 0.82, b = 1.00 };
 PowerBarColor["SOUL_SHARDS"] = { r = 0.50, g = 0.32, b = 0.55 };
-PowerBarColor["ECLIPSE"] = { negative = { r = 0.30, g = 0.52, b = 0.90 },  positive = { r = 0.80, g = 0.82, b = 0.60 }};
+PowerBarColor["LUNAR_POWER"] = { r = 0.30, g = 0.52, b = 0.90, atlas="_Druid-LunarBar" };
 PowerBarColor["HOLY_POWER"] = { r = 0.95, g = 0.90, b = 0.60 };
-PowerBarColor["DEMONIC_FURY"] = { r = 0.50, g = 0.32, b = 0.55 };
+PowerBarColor["MAELSTROM"] = { r = 0.00, g = 0.50, b = 1.00, atlas = "_Shaman-MaelstromBar", fullPowerAnim=true };
+PowerBarColor["INSANITY"] = { r = 0.40, g = 0, b = 0.80, atlas = "_Priest-InsanityBar"};
+PowerBarColor["CHI"] = { r = 0.71, g = 1.0, b = 0.92 };
+PowerBarColor["ARCANE_CHARGES"] = { r = 0.1, g = 0.1, b = 0.98 };	
+PowerBarColor["FURY"] = { r = 0.788, g = 0.259, b = 0.992, atlas = "_DemonHunter-DemonicFuryBar", fullPowerAnim=true };
+PowerBarColor["PAIN"] = { r = 1, g = 0, b = 0, atlas = "_DemonHunter-DemonicPainBar", fullPowerAnim=true };
 -- vehicle colors
 PowerBarColor["AMMOSLOT"] = { r = 0.80, g = 0.60, b = 0.00 };
 PowerBarColor["FUEL"] = { r = 0.0, g = 0.55, b = 0.5 };
@@ -26,8 +31,12 @@ PowerBarColor[4] = PowerBarColor["CHI"];
 PowerBarColor[5] = PowerBarColor["RUNES"];
 PowerBarColor[6] = PowerBarColor["RUNIC_POWER"];
 PowerBarColor[7] = PowerBarColor["SOUL_SHARDS"];
-PowerBarColor[8] = PowerBarColor["ECLIPSE"];
+PowerBarColor[8] = PowerBarColor["LUNAR_POWER"];
 PowerBarColor[9] = PowerBarColor["HOLY_POWER"];
+PowerBarColor[11] = PowerBarColor["MAELSTROM"];
+PowerBarColor[13] = PowerBarColor["INSANITY"];
+PowerBarColor[17] = PowerBarColor["FURY"];
+PowerBarColor[18] = PowerBarColor["PAIN"];
 
 --[[
 	This system uses "update" functions as OnUpdate, and OnEvent handlers.
@@ -41,7 +50,7 @@ PowerBarColor[9] = PowerBarColor["HOLY_POWER"];
 
 function UnitFrame_Initialize (self, unit, name, portrait, healthbar, healthtext, manabar, manatext, threatIndicator, threatFeedbackUnit, threatNumericIndicator,
 		myHealPredictionBar, otherHealPredictionBar, totalAbsorbBar, totalAbsorbBarOverlay, overAbsorbGlow, overHealAbsorbGlow, healAbsorbBar, healAbsorbBarLeftShadow,
-		healAbsorbBarRightShadow)
+		healAbsorbBarRightShadow, myManaCostPredictionBar)
 	self.unit = unit;
 	self.name = name;
 	self.portrait = portrait;
@@ -58,6 +67,7 @@ function UnitFrame_Initialize (self, unit, name, portrait, healthbar, healthtext
 	self.healAbsorbBar = healAbsorbBar;
 	self.healAbsorbBarLeftShadow = healAbsorbBarLeftShadow;
 	self.healAbsorbBarRightShadow = healAbsorbBarRightShadow;
+	self.myManaCostPredictionBar = myManaCostPredictionBar;
 	if ( self.myHealPredictionBar ) then
 		self.myHealPredictionBar:ClearAllPoints();
 	end
@@ -67,6 +77,10 @@ function UnitFrame_Initialize (self, unit, name, portrait, healthbar, healthtext
 	if ( self.totalAbsorbBar ) then
 		self.totalAbsorbBar:ClearAllPoints();
 	end
+	if ( self.myManaCostPredictionBar ) then
+		self.myManaCostPredictionBar:ClearAllPoints();
+	end
+
 	if ( self.totalAbsorbBarOverlay ) then
 		self.totalAbsorbBar.overlay = self.totalAbsorbBarOverlay;
 		self.totalAbsorbBarOverlay:SetAllPoints(self.totalAbsorbBar);
@@ -115,6 +129,11 @@ function UnitFrame_Initialize (self, unit, name, portrait, healthbar, healthtext
 	end
 	if ( self.totalAbsorbBar ) then
 		self:RegisterUnitEvent("UNIT_ABSORB_AMOUNT_CHANGED", unit);
+	end
+	if ( self.myManaCostPredictionBar ) then
+		self:RegisterUnitEvent("UNIT_SPELLCAST_START", unit);
+		self:RegisterUnitEvent("UNIT_SPELLCAST_STOP", unit);
+		self:RegisterUnitEvent("UNIT_SPELLCAST_FAILED", unit);
 	end
 end
 
@@ -167,6 +186,7 @@ function UnitFrame_Update (self, isParty)
 	UnitFrame_UpdateThreatIndicator(self.threatIndicator, self.threatNumericIndicator);
 	UnitFrameHealPredictionBars_UpdateMax(self);
 	UnitFrameHealPredictionBars_Update(self);
+	UnitFrameManaCostPredictionBars_Update(self);
 end
 
 function UnitFramePortrait_Update (self)
@@ -197,6 +217,9 @@ function UnitFrame_OnEvent(self, event, ...)
 			UnitFrameHealPredictionBars_Update(self);
 		elseif ( event == "UNIT_HEAL_ABSORB_AMOUNT_CHANGED" ) then
 			UnitFrameHealPredictionBars_Update(self);
+		elseif ( event == "UNIT_SPELLCAST_START" or event == "UNIT_SPELLCAST_STOP" or event == "UNIT_SPELLCAST_FAILED" ) then
+			local name, nameSubtext, text, texture, startTime, endTime, isTradeSkill, castID, notInterruptible, spellID = UnitCastingInfo(unit);
+			UnitFrameManaCostPredictionBars_Update(self, event == "UNIT_SPELLCAST_START", startTime, endTime, spellID);
 		end
 	elseif ( not arg1 and event == "UNIT_PORTRAIT_UPDATE" ) then
 		-- this is an update all portraits signal
@@ -347,9 +370,32 @@ function UnitFrameHealPredictionBars_Update(frame)
 	UnitFrameUtil_UpdateFillBar(frame, appendTexture, frame.totalAbsorbBar, totalAbsorb)
 end
 
+function UnitFrameManaCostPredictionBars_Update(frame, isStarting, startTime, endTime, spellID)
+	if (not frame.manabar or not frame.myManaCostPredictionBar) then
+		return;
+	end
+
+	local cost = 0;
+	if (not isStarting or startTime == endTime) then
+		frame.predictedPowerCost = nil;
+	else
+		local costTable = GetSpellPowerCost(spellID);
+		for _, costInfo in pairs(costTable) do
+			if (costInfo.type == frame.manabar.powerType) then
+				cost = costInfo.cost;
+				break;
+			end
+		end
+		frame.predictedPowerCost = cost;
+	end
+	local manaBarTexture = frame.manabar:GetStatusBarTexture();
+	UnitFrameManaBar_Update(frame.manabar, frame.unit);
+	UnitFrameUtil_UpdateManaFillBar(frame, manaBarTexture, frame.myManaCostPredictionBar, cost);
+end
+
 --WARNING: This function is very similar to the function CompactUnitFrameUtil_UpdateFillBar in CompactUnitFrame.lua.
 --If you are making changes here, it is possible you may want to make changes there as well.
-function UnitFrameUtil_UpdateFillBar(frame, previousTexture, bar, amount, barOffsetXPercent)
+function UnitFrameUtil_UpdateFillBarBase(frame, realbar, previousTexture, bar, amount, barOffsetXPercent)
 	if ( amount == 0 ) then
 		bar:Hide();
 		if ( bar.overlay ) then
@@ -360,15 +406,15 @@ function UnitFrameUtil_UpdateFillBar(frame, previousTexture, bar, amount, barOff
 	
 	local barOffsetX = 0;
 	if ( barOffsetXPercent ) then
-		local healthbarSizeX = frame.healthbar:GetWidth();
-		barOffsetX = healthbarSizeX * barOffsetXPercent;
+		local realbarSizeX = realbar:GetWidth();
+		barOffsetX = realbarSizeX * barOffsetXPercent;
 	end
 
 	bar:SetPoint("TOPLEFT", previousTexture, "TOPRIGHT", barOffsetX, 0);
 	bar:SetPoint("BOTTOMLEFT", previousTexture, "BOTTOMRIGHT", barOffsetX, 0);
 
-	local totalWidth, totalHeight = frame.healthbar:GetSize();
-	local _, totalMax = frame.healthbar:GetMinMaxValues();
+	local totalWidth, totalHeight = realbar:GetSize();
+	local _, totalMax = realbar:GetMinMaxValues();
 
 	local barSize = (amount / totalMax) * totalWidth;
 	bar:SetWidth(barSize);
@@ -378,6 +424,14 @@ function UnitFrameUtil_UpdateFillBar(frame, previousTexture, bar, amount, barOff
 		bar.overlay:Show();
 	end
 	return bar;
+end
+
+function UnitFrameUtil_UpdateFillBar(frame, previousTexture, bar, amount, barOffsetXPercent)
+	return UnitFrameUtil_UpdateFillBarBase(frame, frame.healthbar, previousTexture, bar, amount, barOffsetXPercent);
+end
+
+function UnitFrameUtil_UpdateManaFillBar(frame, previousTexture, bar, amount, barOffsetXPercent)
+	return UnitFrameUtil_UpdateFillBarBase(frame, frame.manabar, previousTexture, bar, amount, barOffsetXPercent);
 end
 
 function UnitFrame_OnEnter (self)
@@ -427,7 +481,28 @@ function UnitFrameManaBar_UpdateType (manaBar)
 	local info = PowerBarColor[powerToken];
 	if ( info ) then
 		if ( not manaBar.lockColor ) then
-			manaBar:SetStatusBarColor(info.r, info.g, info.b);
+			local playerDeadOrGhost = (manaBar.unit == "player" and (UnitIsDead("player") or UnitIsGhost("player")));
+			if ( info.atlas ) then
+				manaBar:SetStatusBarAtlas(info.atlas);
+				manaBar:SetStatusBarColor(1, 1, 1);
+				manaBar:GetStatusBarTexture():SetDesaturated(playerDeadOrGhost);
+				manaBar:GetStatusBarTexture():SetAlpha(playerDeadOrGhost and 0.5 or 1);
+			else
+				manaBar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar");
+				if ( playerDeadOrGhost ) then
+					manaBar:SetStatusBarColor(0.6, 0.6, 0.6, 0.5);
+				else
+					manaBar:SetStatusBarColor(info.r, info.g, info.b);
+				end
+			end
+			
+			if ( manaBar.FeedbackFrame ) then
+				manaBar.FeedbackFrame:Initialize(info, manaBar.unit, powerType);
+			end
+			
+			if ( manaBar.FullPowerFrame ) then
+				manaBar.FullPowerFrame:Initialize(info.fullPowerAnim);
+			end
 		end
 	else
 		if ( not altR) then
@@ -578,6 +653,7 @@ function UnitFrameManaBar_Initialize (unit, statusbar, statustext, frequentUpdat
 		return;
 	end
 	statusbar.unit = unit;
+	statusbar.texture = statusbar:GetStatusBarTexture();
 	SetTextStatusBarText(statusbar, statustext);
 	
 	statusbar.frequentUpdates = frequentUpdates;
@@ -591,6 +667,11 @@ function UnitFrameManaBar_Initialize (unit, statusbar, statustext, frequentUpdat
 	end
 	statusbar:RegisterEvent("UNIT_DISPLAYPOWER");
 	statusbar:RegisterUnitEvent("UNIT_MAXPOWER", unit);
+	if ( statusbar.unit == "player" ) then
+		statusbar:RegisterEvent("PLAYER_DEAD");
+		statusbar:RegisterEvent("PLAYER_ALIVE");
+		statusbar:RegisterEvent("PLAYER_UNGHOST");
+	end
 	statusbar:SetScript("OnEvent", UnitFrameManaBar_OnEvent);
 end
 
@@ -606,6 +687,8 @@ function UnitFrameManaBar_OnEvent(self, event, ...)
 			UnitFrameManaBar_RegisterDefaultEvents(self);
 			self:SetScript("OnUpdate", nil);
 		end
+	elseif ( event == "PLAYER_ALIVE"  or event == "PLAYER_DEAD" or event == "PLAYER_UNGHOST" ) then
+		UnitFrameManaBar_UpdateType(self);
 	else
 		if ( not self.ignoreNoUnit or UnitGUID(self.unit) ) then
 			UnitFrameManaBar_Update(self, ...);
@@ -615,9 +698,22 @@ end
 
 function UnitFrameManaBar_OnUpdate(self)
 	if ( not self.disconnected and not self.lockValues ) then
+		local predictedCost = self:GetParent().predictedPowerCost;
 		local currValue = UnitPower(self.unit, self.powerType);
+		if (predictedCost) then
+			currValue = currValue - predictedCost;
+		end
 		if ( currValue ~= self.currValue ) then
 			if ( not self.ignoreNoUnit or UnitGUID(self.unit) ) then
+				if ( self.FeedbackFrame ) then
+					-- Only show anim if change is more than 10%
+					if ( math.abs(currValue - self.currValue) / self.FeedbackFrame.maxValue > 0.1 ) then
+						self.FeedbackFrame:StartFeedbackAnim(self.currValue or 0, currValue);
+					end
+				end
+				if ( self.FullPowerFrame and self.FullPowerFrame.active ) then
+					self.FullPowerFrame:StartAnimIfFull(self.currValue or 0, currValue);
+				end
 				self:SetValue(currValue);
 				self.currValue = currValue;
 				TextStatusBar_UpdateTextString(self);
@@ -638,7 +734,7 @@ function UnitFrameManaBar_Update(statusbar, unit)
 		local maxValue = UnitPowerMax(unit, statusbar.powerType);
 
 		statusbar:SetMinMaxValues(0, maxValue);
-
+		
 		statusbar.disconnected = not UnitIsConnected(unit);
 		if ( statusbar.disconnected ) then
 			statusbar:SetValue(maxValue);
@@ -647,7 +743,15 @@ function UnitFrameManaBar_Update(statusbar, unit)
 				statusbar:SetStatusBarColor(0.5, 0.5, 0.5);
 			end
 		else
+			local predictedCost = statusbar:GetParent().predictedPowerCost;
 			local currValue = UnitPower(unit, statusbar.powerType);
+			if (predictedCost) then
+				currValue = currValue - predictedCost;
+			end
+			if ( statusbar.FullPowerFrame ) then
+				statusbar.FullPowerFrame:SetMaxValue(maxValue);
+			end
+
 			statusbar:SetValue(currValue);
 			statusbar.currValue = currValue;
 		end

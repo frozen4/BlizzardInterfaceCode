@@ -5,6 +5,9 @@ QUEST_DESCRIPTION_GRADIENT_LENGTH = 30;
 QUEST_DESCRIPTION_GRADIENT_CPS = 70;
 QUESTINFO_FADE_IN = 0.5;
 
+QUEST_FRAME_AUTO_ACCEPT_QUEST_ID = 0;
+QUEST_FRAME_AUTO_ACCEPT_QUEST_START_ITEM_ID = 0;
+
 function QuestFrame_OnLoad(self)
 	self:RegisterEvent("QUEST_GREETING");
 	self:RegisterEvent("QUEST_DETAIL");
@@ -14,6 +17,7 @@ function QuestFrame_OnLoad(self)
 	self:RegisterEvent("QUEST_ITEM_UPDATE");
 	self:RegisterEvent("QUEST_LOG_UPDATE");
 	self:RegisterEvent("UNIT_PORTRAIT_UPDATE");
+	self:RegisterEvent("LEARNED_SPELL_IN_TAB");
 end
 
 function QuestFrame_OnEvent(self, event, ...)
@@ -32,6 +36,25 @@ function QuestFrame_OnEvent(self, event, ...)
 		QuestFrameGreetingPanel:Hide();
 		QuestFrameGreetingPanel:Show();
 	elseif ( event == "QUEST_DETAIL" ) then
+		local questStartItemID = ...;
+		QUEST_FRAME_AUTO_ACCEPT_QUEST_ID = 0;
+        QUEST_FRAME_AUTO_ACCEPT_QUEST_START_ITEM_ID = 0;
+        
+		if ( QuestIsFromAdventureMap() ) then
+			HideUIPanel(QuestLogPopupDetailFrame);
+			return;
+		end
+
+        if(questStartItemID ~= nil and questStartItemID ~= 0) then
+            QUEST_FRAME_AUTO_ACCEPT_QUEST_ID = GetQuestID();
+            QUEST_FRAME_AUTO_ACCEPT_QUEST_START_ITEM_ID = questStartItemID;
+			if (AutoQuestPopupTracker_AddPopUp(GetQuestID(), "OFFER")) then
+                PlayAutoAcceptQuestSound();
+            end
+            CloseQuest();
+            return;
+		end
+        
 		if ( QuestGetAutoAccept() and QuestIsFromAreaTrigger()) then
 			if (AutoQuestPopupTracker_AddPopUp(GetQuestID(), "OFFER")) then
 				PlayAutoAcceptQuestSound();
@@ -67,6 +90,12 @@ function QuestFrame_OnEvent(self, event, ...)
 		-- just update if at greeting panel
 		if ( QuestFrameGreetingPanel:IsShown() ) then
 			QuestFrameGreetingPanel_OnShow(QuestFrameGreetingPanel);
+		end
+		return;
+	elseif ( event == "LEARNED_SPELL_IN_TAB" ) then
+		if ( QuestInfoFrame.rewardsFrame:IsVisible() ) then
+			QuestInfo_ShowRewards();
+			QuestDetailScrollFrameScrollBar:SetValue(0);
 		end
 		return;
 	end
@@ -168,6 +197,9 @@ function QuestFrameProgressPanel_OnShow()
 	else
 		QuestFrameCompleteButton:Disable();
 	end
+	local canIgnore = CanIgnoreQuest();
+	QuestFrameGoodbyeButton:SetShown(not canIgnore);
+	QuestFrameProgressPanel.IgnoreButton:SetShown(canIgnore);
 	QuestFrameProgressItems_Update();
 end
 
@@ -264,7 +296,10 @@ function QuestFrameGreetingPanel_OnShow()
 			local questTitleButton = _G["QuestTitleButton"..i];
 			local questTitleButtonIcon = _G[questTitleButton:GetName() .. "QuestIcon"];
 			local title, isComplete = GetActiveTitle(i);
-			if ( IsActiveQuestTrivial(i) ) then
+			if ( IsActiveQuestIgnored(i) ) then
+				questTitleButton:SetFormattedText(IGNORED_QUEST_DISPLAY, title);
+				questTitleButtonIcon:SetVertexColor(0.75,0.75,0.75);
+			elseif ( IsActiveQuestTrivial(i) ) then
 				questTitleButton:SetFormattedText(TRIVIAL_QUEST_DISPLAY, title);
 				questTitleButtonIcon:SetVertexColor(0.75,0.75,0.75);
 			else
@@ -305,7 +340,7 @@ function QuestFrameGreetingPanel_OnShow()
 		for i=(numActiveQuests + 1), (numActiveQuests + numAvailableQuests), 1 do
 			local questTitleButton = _G["QuestTitleButton"..i];
 			local questTitleButtonIcon = _G[questTitleButton:GetName() .. "QuestIcon"];
-			local isTrivial, frequency, isRepeatable, isLegendary = GetAvailableQuestInfo(i - numActiveQuests);
+			local isTrivial, frequency, isRepeatable, isLegendary, isIgnored = GetAvailableQuestInfo(i - numActiveQuests);
 			if ( isLegendary ) then
 				questTitleButtonIcon:SetTexture("Interface\\GossipFrame\\AvailableLegendaryQuestIcon");
 			elseif ( frequency == LE_QUEST_FREQUENCY_DAILY or frequency == LE_QUEST_FREQUENCY_WEEKLY ) then
@@ -315,7 +350,10 @@ function QuestFrameGreetingPanel_OnShow()
 			else
 				questTitleButtonIcon:SetTexture("Interface\\GossipFrame\\AvailableQuestIcon");
 			end
-			if ( isTrivial ) then
+			if ( isIgnored ) then
+				questTitleButton:SetFormattedText(IGNORED_QUEST_DISPLAY, GetAvailableTitle(i - numActiveQuests));
+				questTitleButtonIcon:SetVertexColor(0.5,0.5,0.5);
+			elseif ( isTrivial ) then
 				questTitleButton:SetFormattedText(TRIVIAL_QUEST_DISPLAY, GetAvailableTitle(i - numActiveQuests));
 				questTitleButtonIcon:SetVertexColor(0.5,0.5,0.5);
 			else
@@ -430,15 +468,39 @@ function QuestFrame_HideQuestPortrait()
 	QuestNPCModel:Hide();
 end
 
+
+function QuestFrameIgnoreButton_OnClick()
+	IgnoreQuest();
+	PlaySound("igQuestCancel");
+end
+
+function QuestFrameIgnoreButton_OnShow(self)
+	if (not GetCVarBitfield("closedInfoFrames", LE_FRAME_TUTORIAL_IGNORE_QUEST)) then
+		QuestFrame.IgnoreButtonHelpBox:SetPoint("LEFT", self, "RIGHT", 28, 0);
+		QuestFrame.IgnoreButtonHelpBox:Show();
+	end
+end
+
+function QuestFrameIgnoreButton_OnHide()
+	QuestFrame.IgnoreButtonHelpBox:Hide();
+end
+
 function QuestFrameDetailPanel_OnShow()
 	QuestFrameRewardPanel:Hide();
 	QuestFrameProgressPanel:Hide();
 	QuestFrameGreetingPanel:Hide();
 	if ( QuestGetAutoAccept() ) then
 		QuestFrameDeclineButton:Hide();
+		QuestFrameDetailPanel.IgnoreButton:Hide();
 		QuestFrameCloseButton:Disable();
 		QuestFrame.autoQuest = true;
-	end		
+	elseif ( CanIgnoreQuest() ) then
+		QuestFrameDeclineButton:Hide();
+		QuestFrameDetailPanel.IgnoreButton:Show();
+	else
+		QuestFrameDeclineButton:Show();
+		QuestFrameDetailPanel.IgnoreButton:Hide();
+	end
 	local material = QuestFrame_GetMaterial();
 	QuestFrame_SetMaterial(QuestFrameDetailPanel, material);
 	QuestInfo_Display(QUEST_TEMPLATE_DETAIL, QuestDetailScrollChildFrame, QuestFrameAcceptButton, material);

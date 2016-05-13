@@ -4,6 +4,7 @@ GLUE_SCREENS = {
 	["realmlist"] = 	{ frame = "RealmListUI", 		playMusic = true,	playAmbience = false },
 	["charselect"] = 	{ frame = "CharacterSelect",	playMusic = true,	playAmbience = false, onAttemptShow = function() InitializeCharacterScreenData() end },
 	["charcreate"] =	{ frame = "CharacterCreate",	playMusic = true,	playAmbience = false, onAttemptShow = function() InitializeCharacterScreenData() end },
+	["kioskmodesplash"]={ frame = "KioskModeSplash",	playMusic = true,	playAmbience = false },
 };
 
 GLUE_SECONDARY_SCREENS = {
@@ -18,7 +19,7 @@ SEX_MALE = 2;
 SEX_FEMALE = 3;
 
 function GlueParent_OnLoad(self)
-	local width = GetScreenWidth();
+   	local width = GetScreenWidth();
 	local height = GetScreenHeight();
 
 	if ( width / height > 16 / 9) then
@@ -44,7 +45,7 @@ function GlueParent_OnEvent(self, event, ...)
 		GlueParent_UpdateDialogs();
 		GlueParent_CheckCinematic();
 		if ( AccountLogin:IsVisible() ) then
-			CheckSystemRequirements();
+			SetExpansionLogo(AccountLogin.UI.GameLogo, GetClientDisplayExpansionLevel());
 		end
 	elseif ( event == "LOGIN_STATE_CHANGED" ) then
 		GlueParent_EnsureValidScreen();
@@ -74,7 +75,7 @@ end
 
 function GlueParent_IsScreenValid(screen)
 	local auroraState, connectedToWoW, wowConnectionState, hasRealmList = C_Login.GetState();
-	if ( screen == "charselect" or screen == "charcreate" ) then
+	if ( screen == "charselect" or screen == "charcreate" or screen == "kioskmodesplash" ) then
 		return auroraState == LE_AURORA_STATE_NONE and (connectedToWoW or wowConnectionState == LE_WOW_CONNECTION_STATE_CONNECTING) and not hasRealmList;
 	elseif ( screen == "realmlist" ) then
 		return hasRealmList;
@@ -332,79 +333,10 @@ function GlueParent_CheckCinematic()
 end
 
 -- =============================================================
--- Fade functions
--- =============================================================
-
-FADEFRAMES = {};
-
-function GlueFrameFade(frame, timeToFade, mode, finishedFunction)
-	if ( frame ) then
-		frame.fadeTimer = 0;
-		frame.timeToFade = timeToFade;
-		frame.mode = mode;
-		-- finishedFunction is an optional function that is called when the animation is complete
-		if ( finishedFunction ) then
-			frame.finishedFunction = finishedFunction;
-		end
-		tinsert(FADEFRAMES, frame);
-	end
-end
-
--- Fade in function
-function GlueFrameFadeIn(frame, timeToFade, finishedFunction)
-	GlueFrameFade(frame, timeToFade, "IN", finishedFunction);
-end
-
--- Fade out function
-function GlueFrameFadeOut(frame, timeToFade, finishedFunction)
-	GlueFrameFade(frame, timeToFade, "OUT", finishedFunction);
-end
-
--- Function that actually performs the alpha change
-function GlueFrameFadeUpdate(self, elapsed)
-	local index = 1;
-	while FADEFRAMES[index] do
-		local frame = FADEFRAMES[index];
-		frame.fadeTimer = frame.fadeTimer + elapsed;
-		if ( frame.fadeTimer < frame.timeToFade ) then
-			if ( frame.mode == "IN" ) then
-				frame:SetAlpha(frame.fadeTimer / frame.timeToFade);
-			elseif ( frame.mode == "OUT" ) then
-				frame:SetAlpha((frame.timeToFade - frame.fadeTimer) / frame.timeToFade);
-			end
-		else
-			if ( frame.mode == "IN" ) then
-				frame:SetAlpha(1.0);
-			elseif ( frame.mode == "OUT" ) then
-				frame:SetAlpha(0);
-			end
-			GlueFrameFadeRemoveFrame(frame);
-			if ( frame.finishedFunction ) then
-				frame.finishedFunction();
-				frame.finishedFunction = nil;
-			end
-		end
-		index = index + 1;
-	end
-end
-
-function GlueFrameFadeRemoveFrame(frame)
-	local index = 1;
-	while FADEFRAMES[index] do
-		if ( frame == FADEFRAMES[index] ) then
-			tremove(FADEFRAMES, index);
-		end
-		index = index + 1;
-	end
-end
-
--- =============================================================
 -- Model functions
 -- =============================================================
 
 function SetLoginScreenModel(model)
-	model:SetCamera(0);
-	model:SetSequence(0);
 
 	local expansionLevel = GetClientDisplayExpansionLevel();
 	local lowResBG = EXPANSION_LOW_RES_BG[expansionLevel];
@@ -412,6 +344,8 @@ function SetLoginScreenModel(model)
 	local background = GetLoginScreenBackground(highResBG, lowResBG);
 
 	model:SetModel(background, true);
+	model:SetCamera(0);
+	model:SetSequence(0);
 end
 
 -- Function to get the background tag from a full path ( '..\UI_tagName.m2' )
@@ -427,24 +361,11 @@ function GetBackgroundModelTag(path)
 	return tag;
 end
 
-function SetLighting(model, race)
+function ResetLighting(model)
 	--model:SetSequence(0);
 	model:SetCamera(0);
-	local fogInfo = CHAR_MODEL_FOG_INFO[race];
-	if ( fogInfo ) then
-		model:SetFogColor(fogInfo.r, fogInfo.g, fogInfo.b);
-		model:SetFogNear(0);
-		model:SetFogFar(fogInfo.far);
-	else
-		model:ClearFog();
-    end
-
-    local glowInfo = CHAR_MODEL_GLOW_INFO[race];
-    if ( glowInfo ) then
-        model:SetGlow(glowInfo);
-    else
-		model:SetGlow(0.3);
-    end
+	model:ClearFog();
+	model:SetGlow(0.3);
 
     model:ResetLights();
 end
@@ -460,11 +381,7 @@ function SetBackgroundModel(model, path)
 	if ( GLUE_AMBIENCE_TRACKS[nameupper] ) then
 		PlayGlueAmbience(GLUE_AMBIENCE_TRACKS[nameupper], 4.0);
 	end
-	if ( ( model == CharacterSelectModel ) and ( string.find(model:GetModel(), 'lowres') == nil ) ) then
-		SetLighting(model, nameupper)
-	else
-		SetLighting(model, "DEFAULT")
-	end
+	ResetLighting(model);
 
 	return nameupper;
 end
@@ -498,8 +415,12 @@ end
 function SetExpansionLogo(texture, expansionLevel)
 	if ( EXPANSION_LOGOS[expansionLevel].texture ) then
 		texture:SetTexture(EXPANSION_LOGOS[expansionLevel].texture);
-	else
+		texture:Show();
+	elseif ( EXPANSION_LOGOS[expansionLevel].atlas ) then
 		texture:SetAtlas(EXPANSION_LOGOS[expansionLevel].atlas);
+		texture:Show();
+	else
+		texture:Hide();
 	end
 end
 
@@ -515,19 +436,19 @@ function MinutesToTime(mins, hideDays)
 	-- only show days if hideDays is false
 	if ( mins > 1440 and not hideDays ) then
 		tempTime = floor(mins / 1440);
-		time = tempTime..TIME_UNIT_DELIMITER..DAYS_ABBR..TIME_UNIT_DELIMITER;
+		time = TIME_UNIT_DELIMITER .. format(DAYS_ABBR, tempTime);
 		mins = mod(mins, 1440);
 		count = count + 1;
 	end
 	if ( mins > 60  ) then
 		tempTime = floor(mins / 60);
-		time = time..tempTime..TIME_UNIT_DELIMITER..HOURS_ABBR..TIME_UNIT_DELIMITER;
+		time = time .. TIME_UNIT_DELIMITER .. format(DAYS_ABBR, tempTime);
 		mins = mod(mins, 60);
 		count = count + 1;
 	end
 	if ( count < 2 ) then
 		tempTime = mins;
-		time = time..tempTime..TIME_UNIT_DELIMITER..MINUTES_ABBR..TIME_UNIT_DELIMITER;
+		time = time .. TIME_UNIT_DELIMITER .. format(MINUTES_ABBR, tempTime);
 		count = count + 1;
 	end
 	return time;
